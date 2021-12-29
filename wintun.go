@@ -1,19 +1,20 @@
+//go:build windows
+
 /* SPDX-License-Identifier: MIT
  *
  * Copyright (C) 2017-2021 WireGuard LLC. All Rights Reserved.
  */
 
-//go:build windows
-
 package wintun
 
 import (
-	"log"
 	"runtime"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type loggerLevel int
@@ -44,11 +45,14 @@ type TimestampedWriter interface {
 	WriteWithTimestamp(p []byte, ts int64) (n int, err error)
 }
 
-func logMessage(level loggerLevel, timestamp uint64, msg *uint16) int {
-	if tw, ok := log.Default().Writer().(TimestampedWriter); ok {
-		tw.WriteWithTimestamp([]byte(log.Default().Prefix()+windows.UTF16PtrToString(msg)), (int64(timestamp)-116444736000000000)*100)
-	} else {
+func logMessage(level loggerLevel, msg *uint16) int {
+	switch level {
+	case logInfo:
 		log.Println(windows.UTF16PtrToString(msg))
+	case logWarn:
+		log.Warnln(windows.UTF16PtrToString(msg))
+	case logErr:
+		log.Errorln(windows.UTF16PtrToString(msg))
 	}
 	return 0
 }
@@ -57,11 +61,11 @@ func setupLogger(dll *lazyDLL) {
 	var callback uintptr
 	if runtime.GOARCH == "386" {
 		callback = windows.NewCallback(func(level loggerLevel, timestampLow, timestampHigh uint32, msg *uint16) int {
-			return logMessage(level, uint64(timestampHigh)<<32|uint64(timestampLow), msg)
+			return logMessage(level, msg)
 		})
 	} else if runtime.GOARCH == "arm" {
 		callback = windows.NewCallback(func(level loggerLevel, _, timestampLow, timestampHigh uint32, msg *uint16) int {
-			return logMessage(level, uint64(timestampHigh)<<32|uint64(timestampLow), msg)
+			return logMessage(level, msg)
 		})
 	} else if runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64" {
 		callback = windows.NewCallback(logMessage)
