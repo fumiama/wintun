@@ -41,18 +41,14 @@ var (
 	procWintunGetRunningDriverVersion = modwintun.NewProc("WintunGetRunningDriverVersion")
 )
 
-type TimestampedWriter interface {
-	WriteWithTimestamp(p []byte, ts int64) (n int, err error)
-}
-
-func logMessage(level loggerLevel, msg *uint16) int {
+func logMessage(level loggerLevel, timestamp uint64, msg *uint16) int {
 	switch level {
 	case logInfo:
-		log.Println(windows.UTF16PtrToString(msg))
+		log.Println("[wintun] (", (int64(timestamp)-116444736000000000)*100, ")", windows.UTF16PtrToString(msg))
 	case logWarn:
-		log.Warnln(windows.UTF16PtrToString(msg))
+		log.Warnln("[wintun] (", (int64(timestamp)-116444736000000000)*100, ")", windows.UTF16PtrToString(msg))
 	case logErr:
-		log.Errorln(windows.UTF16PtrToString(msg))
+		log.Errorln("[wintun] (", (int64(timestamp)-116444736000000000)*100, ")", windows.UTF16PtrToString(msg))
 	}
 	return 0
 }
@@ -61,11 +57,11 @@ func setupLogger(dll *lazyDLL) {
 	var callback uintptr
 	if runtime.GOARCH == "386" {
 		callback = windows.NewCallback(func(level loggerLevel, timestampLow, timestampHigh uint32, msg *uint16) int {
-			return logMessage(level, msg)
+			return logMessage(level, uint64(timestampHigh)<<32|uint64(timestampLow), msg)
 		})
 	} else if runtime.GOARCH == "arm" {
 		callback = windows.NewCallback(func(level loggerLevel, _, timestampLow, timestampHigh uint32, msg *uint16) int {
-			return logMessage(level, msg)
+			return logMessage(level, uint64(timestampHigh)<<32|uint64(timestampLow), msg)
 		})
 	} else if runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64" {
 		callback = windows.NewCallback(logMessage)
